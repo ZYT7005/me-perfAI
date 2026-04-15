@@ -1324,9 +1324,11 @@
     </header>
 
     <!-- 主模式切换 -->
-    <div class="segment" style="margin-bottom: 28px; max-width: 360px;">
+    <div class="segment" style="margin-bottom: 28px; max-width: 520px;">
       <input type="radio" name="mainMode" id="mm-psi" value="psi" checked />
       <label for="mm-psi">PageSpeed 分析</label>
+      <input type="radio" name="mainMode" id="mm-zip" value="zip" />
+      <label for="mm-zip">压缩包分析</label>
       <input type="radio" name="mainMode" id="mm-simple" value="simple" />
       <label for="mm-simple">简易代码修复</label>
     </div>
@@ -1471,6 +1473,50 @@
         </div>
       </section>
     </div><!-- /simple-mode -->
+
+    <!-- 压缩包分析模式 -->
+    <div id="zip-mode" style="display:none;">
+      <form id="zipForm" novalidate>
+        <div class="card">
+          <h2 class="card-title">上传压缩包</h2>
+          <p class="card-desc">上传 <strong>.zip</strong> 格式的 Shopify 主题包或模板文件夹，系统将自动解压并扫描所有 <code>.liquid</code> / <code>.html</code> 文件，输出逐文件性能问题定位报告（最大 50 MB）。</p>
+          <label class="field-label" for="zipFile">选择 .zip 文件</label>
+          <input id="zipFile" type="file" accept=".zip,application/zip,application/x-zip-compressed" />
+          <div id="zipFileMeta" class="file-meta hidden">
+            <span class="name" id="zipFileName"></span>
+            <button type="button" class="replace" id="zipFileReplace">更换</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="submit" id="zipSubmitBtn">开始扫描</button>
+        </div>
+      </form>
+
+      <section id="zipOut" style="display:none; margin-top:40px;">
+        <!-- 错误 -->
+        <div id="zipErrorSection" style="display:none; margin-bottom:20px;">
+          <div class="card" style="border-color:rgba(255,107,122,0.35);">
+            <h2 class="card-title" style="color:var(--danger);">错误</h2>
+            <pre id="zipError" style="margin:0;background:#3f0d0d;color:#fecaca;"></pre>
+          </div>
+        </div>
+        <!-- 汇总 -->
+        <div id="zipSummary" style="display:none; margin-bottom:20px;">
+          <div class="card">
+            <h2 class="card-title">扫描汇总</h2>
+            <div id="zipSummaryBody" style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:10px;"></div>
+          </div>
+        </div>
+        <!-- 文件列表 -->
+        <div id="zipFiles" style="display:none;">
+          <div class="card">
+            <h2 class="card-title">文件问题定位</h2>
+            <p style="font-size:0.8125rem;color:var(--muted);margin:4px 0 16px;">按问题数量排序，点击文件名展开详情。仅 .liquid / .html 文件做静态扫描；其余文件仅列出。</p>
+            <div id="zipFileList"></div>
+          </div>
+        </div>
+      </section>
+    </div><!-- /zip-mode -->
   </div>
 
   <div id="analyzeOverlay" class="analyze-overlay" aria-hidden="true" role="status">
@@ -2474,13 +2520,186 @@
       // ── 主模式切换 ──────────────────────────────────────────────
       var modePsi = document.getElementById("psi-mode");
       var modeSimple = document.getElementById("simple-mode");
+      var modeZip = document.getElementById("zip-mode");
       document.querySelectorAll('input[name="mainMode"]').forEach(function (r) {
         r.addEventListener("change", function () {
           var v = document.querySelector('input[name="mainMode"]:checked').value;
           modePsi.style.display = v === "psi" ? "" : "none";
           modeSimple.style.display = v === "simple" ? "" : "none";
+          modeZip.style.display = v === "zip" ? "" : "none";
         });
       });
+
+      // ── 压缩包分析 ────────────────────────────────────────────────
+      (function () {
+        var zipForm = document.getElementById("zipForm");
+        var zipFileInput = document.getElementById("zipFile");
+        var zipFileMeta = document.getElementById("zipFileMeta");
+        var zipFileName = document.getElementById("zipFileName");
+        var zipFileReplace = document.getElementById("zipFileReplace");
+        var zipSubmitBtn = document.getElementById("zipSubmitBtn");
+        var zipOut = document.getElementById("zipOut");
+        var zipErrorSection = document.getElementById("zipErrorSection");
+        var zipError = document.getElementById("zipError");
+        var zipSummary = document.getElementById("zipSummary");
+        var zipSummaryBody = document.getElementById("zipSummaryBody");
+        var zipFiles = document.getElementById("zipFiles");
+        var zipFileList = document.getElementById("zipFileList");
+
+        // 文件选中后显示文件名
+        zipFileInput.addEventListener("change", function () {
+          var f = zipFileInput.files && zipFileInput.files[0];
+          if (!f) return;
+          zipFileName.textContent = f.name;
+          zipFileMeta.classList.remove("hidden");
+          zipFileInput.classList.add("hidden");
+        });
+        zipFileReplace.addEventListener("click", function () {
+          zipFileInput.classList.remove("hidden");
+          zipFileMeta.classList.add("hidden");
+          zipFileInput.value = "";
+        });
+
+        function resetZipOut() {
+          zipOut.style.display = "none";
+          zipErrorSection.style.display = "none";
+          zipSummary.style.display = "none";
+          zipFiles.style.display = "none";
+          zipFileList.innerHTML = "";
+          zipSummaryBody.innerHTML = "";
+        }
+
+        function urgencyColor(u) {
+          if (u === "high") return "var(--danger)";
+          if (u === "medium") return "#f6ad55";
+          return "var(--muted)";
+        }
+        function urgencyLabel(u) {
+          if (u === "high") return "紧急";
+          if (u === "medium") return "中等";
+          return "一般";
+        }
+        function escHtml(s) {
+          return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function renderStat(label, value, color) {
+          var el = document.createElement("div");
+          el.style.cssText = "background:rgba(0,0,0,0.18);border-radius:10px;padding:14px 16px;border:1px solid var(--border);text-align:center;";
+          el.innerHTML = '<div style="font-size:1.5rem;font-weight:700;color:' + (color || "var(--text)") + ';">' + escHtml(value) + '</div>'
+            + '<div style="font-size:0.75rem;color:var(--muted);margin-top:4px;">' + escHtml(label) + '</div>';
+          return el;
+        }
+
+        function renderZipResults(data) {
+          // 汇总
+          zipSummary.style.display = "";
+          zipSummaryBody.appendChild(renderStat("扫描文件数", data.scannedFiles));
+          zipSummaryBody.appendChild(renderStat("压缩包文件总数", data.totalFiles));
+          zipSummaryBody.appendChild(renderStat("问题总数", data.totalFindings));
+          zipSummaryBody.appendChild(renderStat("紧急", data.high, "var(--danger)"));
+          zipSummaryBody.appendChild(renderStat("中等", data.medium, "#f6ad55"));
+          zipSummaryBody.appendChild(renderStat("一般", data.low, "var(--muted)"));
+
+          // 文件列表
+          zipFiles.style.display = "";
+          (data.files || []).forEach(function (f, idx) {
+            var hasIssues = f.findings && f.findings.length > 0;
+            var wrapper = document.createElement("div");
+            wrapper.style.cssText = "border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;";
+
+            // 文件头
+            var header = document.createElement("div");
+            header.style.cssText = "display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:rgba(0,0,0,0.15);user-select:none;";
+            var badge = "";
+            if (f.skipped) {
+              badge = '<span style="font-size:0.7rem;padding:2px 8px;border-radius:999px;background:rgba(100,150,255,0.15);color:var(--muted);">跳过</span>';
+            } else if (hasIssues) {
+              badge = '<span style="font-size:0.7rem;padding:2px 8px;border-radius:999px;background:rgba(255,107,122,0.18);color:var(--danger);">' + f.findings.length + ' 项问题</span>';
+            } else {
+              badge = '<span style="font-size:0.7rem;padding:2px 8px;border-radius:999px;background:rgba(98,232,163,0.15);color:var(--ok);">无问题</span>';
+            }
+            header.innerHTML = badge
+              + '<span style="font-size:0.8125rem;font-family:\'Roboto Mono\',monospace;color:var(--text);flex:1;word-break:break-all;">' + escHtml(f.file) + '</span>'
+              + (f.lineCount ? '<span style="font-size:0.75rem;color:var(--muted);white-space:nowrap;">' + f.lineCount + ' 行</span>' : '')
+              + (hasIssues ? '<span style="font-size:0.75rem;color:var(--muted);">▼</span>' : '');
+
+            // 详情体
+            var body = document.createElement("div");
+            body.style.display = "none";
+            body.style.padding = "0 14px 14px";
+
+            if (f.skipped) {
+              body.innerHTML = '<p style="font-size:0.8125rem;color:var(--muted);margin:12px 0 0;">' + escHtml(f.reason) + '</p>';
+            } else if (hasIssues) {
+              f.prioritized.forEach(function (p, pi) {
+                var sn = f.snippets && f.snippets[pi];
+                var item = document.createElement("div");
+                item.style.cssText = "margin-top:12px;padding:10px 12px;background:rgba(0,0,0,0.18);border-radius:8px;border-left:3px solid " + urgencyColor(p.urgency) + ";";
+                var snippetHtml = "";
+                if (sn && sn.code) {
+                  snippetHtml = '<pre style="margin:8px 0 0;font-size:0.75rem;line-height:1.5;overflow-x:auto;max-height:180px;background:rgba(0,0,0,0.3);padding:8px;border-radius:6px;">'
+                    + escHtml(sn.code) + '</pre>'
+                    + '<div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">第 ' + sn.startLine + '–' + sn.endLine + ' 行</div>';
+                }
+                item.innerHTML = '<div style="display:flex;gap:8px;align-items:center;">'
+                  + '<span style="font-size:0.7rem;padding:2px 7px;border-radius:999px;background:rgba(0,0,0,0.3);color:' + urgencyColor(p.urgency) + ';border:1px solid ' + urgencyColor(p.urgency) + ';">' + urgencyLabel(p.urgency) + '</span>'
+                  + '<span style="font-size:0.8125rem;font-weight:500;">' + escHtml(p.title) + '</span>'
+                  + '</div>'
+                  + (p.detail && p.detail.message ? '<div style="font-size:0.8rem;color:var(--muted);margin-top:6px;">' + escHtml(p.detail.message) + '</div>' : '')
+                  + snippetHtml;
+                body.appendChild(item);
+              });
+            }
+
+            if (hasIssues || f.skipped) {
+              header.addEventListener("click", function () {
+                var open = body.style.display !== "none";
+                body.style.display = open ? "none" : "";
+                var arrow = header.querySelector("span:last-child");
+                if (arrow) arrow.textContent = open ? "▼" : "▲";
+              });
+            }
+
+            wrapper.appendChild(header);
+            if (hasIssues || f.skipped) wrapper.appendChild(body);
+            zipFileList.appendChild(wrapper);
+          });
+        }
+
+        zipForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          var file = zipFileInput.files && zipFileInput.files[0];
+          if (!file) { alert("请先选择 .zip 文件"); return; }
+          resetZipOut();
+          zipSubmitBtn.disabled = true;
+          zipSubmitBtn.textContent = "扫描中…";
+
+          var fd = new FormData();
+          fd.append("archive", file);
+
+          fetch("/api/analyze-zip", { method: "POST", body: fd })
+            .then(function (res) { return res.json(); })
+            .then(function (data) {
+              zipOut.style.display = "";
+              if (data.error) {
+                zipError.textContent = data.error;
+                zipErrorSection.style.display = "";
+                return;
+              }
+              renderZipResults(data);
+            })
+            .catch(function (err) {
+              zipOut.style.display = "";
+              zipError.textContent = String(err);
+              zipErrorSection.style.display = "";
+            })
+            .finally(function () {
+              zipSubmitBtn.disabled = false;
+              zipSubmitBtn.textContent = "开始扫描";
+            });
+        });
+      })();
 
       // ── 简易代码修复 ─────────────────────────────────────────────
       var simpleForm = document.getElementById("simpleForm");

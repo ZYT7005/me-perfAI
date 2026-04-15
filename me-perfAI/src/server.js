@@ -20,6 +20,7 @@ import {
 import { analyzeStaticTemplate, prioritizedFromStaticFindings } from "./staticTemplateAnalysis.js";
 import { buildAnalysisReport } from "./analysisReport.js";
 import { callOpenrouterFix } from "./openrouter.js";
+import { analyzeZipBuffer, summarizeZipResults } from "./analyzeZip.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -27,6 +28,10 @@ const publicDir = path.join(root, "public");
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024, files: 2 }
+});
+const uploadZip = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024, files: 1 }
 });
 
 const app = express();
@@ -351,6 +356,33 @@ app.post("/api/quick", async (req, res) => {
   } catch (e) {
     console.error(e);
     res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
+/** 压缩包分析：上传 .zip → 解压 → 多文件静态性能扫描 */
+app.post("/api/analyze-zip", uploadZip.single("archive"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file?.buffer?.length) {
+      return res.status(400).json({ error: "请上传 .zip 格式的压缩包" });
+    }
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (ext !== ".zip") {
+      return res.status(400).json({ error: "仅支持 .zip 格式，请重新打包后上传" });
+    }
+
+    const fileResults = analyzeZipBuffer(file.buffer, file.originalname || "archive.zip");
+    const stats = summarizeZipResults(fileResults);
+
+    res.json({
+      mode: "zip",
+      zipName: file.originalname || "archive.zip",
+      ...stats,
+      files: fileResults
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
 
