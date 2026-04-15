@@ -1319,11 +1319,20 @@
 <body>
   <div class="shell">
     <header class="hero">
-      <h1>PageSpeed 分析</h1>
-      <p>输入网址或域名，自动使用 <strong>standard.md</strong> 标准调用 <strong>PageSpeed</strong> 分析。
-        可展开<strong>高级选项</strong>上传模板文件获取代码级建议。<strong>分析历史</strong>保存在本浏览器，可切换「还原原始 JSON」查看完整返回。</p>
+      <h1>Shopify Liquid 性能优化器</h1>
+      <p>支持两种模式：<strong>PageSpeed 分析</strong>——输入网址调用 Lighthouse 分析，可上传模板文件获取代码级建议；<strong>简易代码修复</strong>——直接粘贴 Liquid 代码并描述性能问题，AI 基于知识库自动修复。</p>
     </header>
 
+    <!-- 主模式切换 -->
+    <div class="segment" style="margin-bottom: 28px; max-width: 360px;">
+      <input type="radio" name="mainMode" id="mm-psi" value="psi" checked />
+      <label for="mm-psi">PageSpeed 分析</label>
+      <input type="radio" name="mainMode" id="mm-simple" value="simple" />
+      <label for="mm-simple">简易代码修复</label>
+    </div>
+
+    <!-- PSI 模式 -->
+    <div id="psi-mode">
     <form id="form" novalidate>
       <!-- 主输入：URL / 域名 -->
       <div class="card quick-card">
@@ -1418,6 +1427,50 @@
       <div id="visualView" class="result-layout"></div>
       <pre class="out-pre hidden" id="jsonView"></pre>
     </section>
+    </div><!-- /psi-mode -->
+
+    <!-- 简易代码修复模式 -->
+    <div id="simple-mode" style="display:none;">
+      <form id="simpleForm" novalidate>
+        <div class="card">
+          <h2 class="card-title">Liquid 代码</h2>
+          <p class="card-desc">粘贴需要优化的 Liquid 模板代码。</p>
+          <textarea id="simpleLiquid" style="min-height:220px; font-family: 'Roboto Mono', Consolas, monospace; font-size: 0.8125rem;" placeholder="粘贴 Liquid 代码…"></textarea>
+        </div>
+        <div class="card" style="margin-top: 20px;">
+          <h2 class="card-title">PageSpeed 性能问题（可选）</h2>
+          <p class="card-desc">描述 PageSpeed 报告中的性能问题，留空则自动进行综合性能优化。</p>
+          <textarea id="simpleIssue" style="min-height: 100px;" placeholder="例：LCP 未达标准阈值，图片加载延迟过高…"></textarea>
+        </div>
+        <div class="actions">
+          <button type="submit" class="submit" id="simpleSubmitBtn">开始修复</button>
+        </div>
+      </form>
+
+      <section id="simpleOut" style="display:none; margin-top: 40px;">
+        <div id="simpleSolutionSection" style="display:none; margin-bottom: 20px;">
+          <div class="card">
+            <h2 class="card-title">命中的知识库优化方案</h2>
+            <pre id="simpleSolution" style="margin: 0;"></pre>
+          </div>
+        </div>
+        <div id="simpleErrorSection" style="display:none; margin-bottom: 20px;">
+          <div class="card" style="border-color: rgba(255,107,122,0.35);">
+            <h2 class="card-title" style="color: var(--danger);">错误</h2>
+            <pre id="simpleError" style="margin: 0; background: #3f0d0d; color: #fecaca;"></pre>
+          </div>
+        </div>
+        <div id="simpleFixedSection" style="display:none;">
+          <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h2 class="card-title" style="margin: 0;">修复后的 Liquid 代码</h2>
+              <button type="button" class="toggle" id="simpleCopyBtn">复制代码</button>
+            </div>
+            <pre id="simpleFixed" style="margin: 0; font-family: 'Roboto Mono', Consolas, monospace; font-size: 0.8125rem;"></pre>
+          </div>
+        </div>
+      </section>
+    </div><!-- /simple-mode -->
   </div>
 
   <div id="analyzeOverlay" class="analyze-overlay" aria-hidden="true" role="status">
@@ -2417,6 +2470,95 @@
         });
       }
       refreshHistoryList();
+
+      // ── 主模式切换 ──────────────────────────────────────────────
+      var modePsi = document.getElementById("psi-mode");
+      var modeSimple = document.getElementById("simple-mode");
+      document.querySelectorAll('input[name="mainMode"]').forEach(function (r) {
+        r.addEventListener("change", function () {
+          var v = document.querySelector('input[name="mainMode"]:checked').value;
+          modePsi.style.display = v === "psi" ? "" : "none";
+          modeSimple.style.display = v === "simple" ? "" : "none";
+        });
+      });
+
+      // ── 简易代码修复 ─────────────────────────────────────────────
+      var simpleForm = document.getElementById("simpleForm");
+      var simpleOut = document.getElementById("simpleOut");
+      var simpleSubmitBtn = document.getElementById("simpleSubmitBtn");
+      var simpleLiquid = document.getElementById("simpleLiquid");
+      var simpleIssue = document.getElementById("simpleIssue");
+      var simpleSolutionSection = document.getElementById("simpleSolutionSection");
+      var simpleSolution = document.getElementById("simpleSolution");
+      var simpleErrorSection = document.getElementById("simpleErrorSection");
+      var simpleError = document.getElementById("simpleError");
+      var simpleFixedSection = document.getElementById("simpleFixedSection");
+      var simpleFixed = document.getElementById("simpleFixed");
+      var simpleCopyBtn = document.getElementById("simpleCopyBtn");
+
+      simpleForm.addEventListener("submit", function (e) {
+        e.preventDefault();
+        var code = simpleLiquid.value.trim();
+        if (!code) { alert("请输入 Liquid 代码"); return; }
+        simpleSubmitBtn.disabled = true;
+        simpleSubmitBtn.textContent = "修复中…";
+        simpleSolutionSection.style.display = "none";
+        simpleErrorSection.style.display = "none";
+        simpleFixedSection.style.display = "none";
+        simpleOut.style.display = "none";
+
+        fetch("/api/simple-fix", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ liquid_code: code, issue_text: simpleIssue.value.trim() })
+        })
+          .then(function (res) { return res.json(); })
+          .then(function (data) {
+            simpleOut.style.display = "";
+            if (data.solution) {
+              simpleSolution.textContent = data.solution;
+              simpleSolutionSection.style.display = "";
+            }
+            if (data.error) {
+              simpleError.textContent = data.error;
+              simpleErrorSection.style.display = "";
+            }
+            if (data.fixedCode) {
+              simpleFixed.textContent = data.fixedCode;
+              simpleFixedSection.style.display = "";
+            }
+            simpleOut.scrollIntoView({ behavior: "smooth", block: "start" });
+          })
+          .catch(function (err) {
+            simpleOut.style.display = "";
+            simpleError.textContent = String(err);
+            simpleErrorSection.style.display = "";
+          })
+          .finally(function () {
+            simpleSubmitBtn.disabled = false;
+            simpleSubmitBtn.textContent = "开始修复";
+          });
+      });
+
+      simpleCopyBtn && simpleCopyBtn.addEventListener("click", function () {
+        var text = simpleFixed.textContent;
+        if (navigator.clipboard) {
+          navigator.clipboard.writeText(text).then(function () {
+            simpleCopyBtn.textContent = "已复制 ✓";
+            setTimeout(function () { simpleCopyBtn.textContent = "复制代码"; }, 1800);
+          });
+        } else {
+          var ta = document.createElement("textarea");
+          ta.value = text;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          simpleCopyBtn.textContent = "已复制 ✓";
+          setTimeout(function () { simpleCopyBtn.textContent = "复制代码"; }, 1800);
+        }
+      });
+
     })();
   </script>
 </body>

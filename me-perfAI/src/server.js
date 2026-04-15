@@ -354,6 +354,26 @@ app.post("/api/quick", async (req, res) => {
   }
 });
 
+/** 简易修复：直接粘贴 Liquid 代码 + 描述问题 → 知识库匹配 + AI 修复 */
+app.post("/api/simple-fix", async (req, res) => {
+  try {
+    const liquidCode = typeof req.body?.liquid_code === "string" ? req.body.liquid_code.trim() : "";
+    const issueText = typeof req.body?.issue_text === "string" ? req.body.issue_text.trim() : "";
+    if (!liquidCode) {
+      return res.status(400).json({ error: "请提供 Liquid 代码" });
+    }
+    const result = await callOpenrouterFix(liquidCode, issueText || "综合性能优化");
+    res.json({
+      fixedCode: result.fixedCode || "",
+      solution: result.appliedSolutions || "",
+      error: result.error || ""
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e instanceof Error ? e.message : String(e) });
+  }
+});
+
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, hasKey: Boolean(process.env.PAGE_SPEED_API_KEY) });
 });
