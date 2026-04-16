@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify 性能优化器</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Shopify 性能优化器</h1>
+            <p>基于 PageSpeed + 知识库 + AI 的 Shopify 主题 LCP 瓶颈定位与全链路重构打包工具</p>
+        </header>
+
+        <main>
+            <!-- 步骤 1：获取 LCP 数据 -->
+            <section class="card" id="step1">
+                <h2>步骤 1：锁定 LCP 性能瓶颈</h2>
+                <p class="section-desc">输入目标网页 URL，系统将通过服务端调用 PageSpeed API 获取性能诊断数据。</p>
+
+                <div class="input-group">
+                    <label for="target-url">目标网页 URL</label>
+                    <input type="url" id="target-url" placeholder="如 https://example.myshopify.com">
+                </div>
+
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                    <select id="strategy-select" style="width:auto;padding:10px 16px;">
+                        <option value="mobile">Mobile</option>
+                        <option value="desktop">Desktop</option>
+                    </select>
+                    <button class="primary-btn" id="fetch-psi-btn" style="flex:1;max-width:200px;">获取诊断数据</button>
+                </div>
+
+                <div id="lcp-status-hint" style="font-size:0.85rem;margin-top:12px;color:var(--text-muted);font-weight:600;"></div>
+
+                <div id="lcp-result" class="hidden result-box mt-3">
+                    <h3>✅ PageSpeed 性能诊断数据</h3>
+                    <div id="psi-summary" style="display:grid;gap:8px;margin-bottom:12px;"></div>
+                    <details>
+                        <summary style="cursor:pointer;font-size:0.85rem;color:var(--text-muted);">查看原始 JSON</summary>
+                        <pre id="lcp-snippet" style="margin-top:8px;max-height:300px;overflow:auto;font-size:0.8rem;background:#1E293B;color:#F8FAFC;padding:12px;border-radius:6px;"></pre>
+                    </details>
+                </div>
+            </section>
+
+            <!-- 步骤 2：上传压缩包与依赖推断 -->
+            <section class="card" id="step2">
+                <h2>步骤 2：上传全站源压缩包与页面解析</h2>
+                <p class="section-desc">上传 Shopify 主题 ZIP 包（最大 100MB）。系统将自动梳理 templates / sections 关联关系。</p>
+
+                <div class="folder-upload-area" id="folder-drop-area">
+                    <span class="fake-btn">选择全站源代码包 (.zip)</span>
+                    <span class="file-msg">或将 .zip 文件拖拽到此处</span>
+                    <input type="file" id="folder-upload" accept=".zip">
+                </div>
+
+                <div id="folder-analysis-ui" class="hidden mt-3">
+                    <div class="input-group">
+                        <label for="template-select">选择承载页面（如 index.json）：</label>
+                        <select id="template-select">
+                            <option value="">-- 请先上传 ZIP 后选择 --</option>
+                        </select>
+                    </div>
+
+                    <div id="section-list-ui" class="hidden mt-3">
+                        <label>该页面关联的 Section 组件（勾选后送交 AI 分析）：</label>
+                        <div id="section-checkboxes" style="background:var(--bg-color);padding:10px;border-radius:6px;max-height:220px;overflow-y:auto;border:1px solid var(--border-color);margin-top:6px;font-size:0.9rem;"></div>
+                    </div>
+
+                    <button class="primary-btn run-btn" id="start-analysis-btn" disabled style="margin-top:20px;">
+                        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        开始执行全自动排查与重构
+                    </button>
+                </div>
+            </section>
+
+            <!-- 步骤 3：对比与抉择 -->
+            <section class="card hidden" id="step3">
+                <h2>步骤 3：优化方案对比与采纳</h2>
+
+                <div id="kb-applied" class="hidden result-box" style="margin-bottom:16px;background:#f0fdf4;border-color:#86efac;">
+                    <h3 style="color:#16a34a;">📚 已应用的知识库优化方案</h3>
+                    <div id="kb-applied-list" style="font-size:0.85rem;margin-top:8px;color:#166534;"></div>
+                </div>
+
+                <div class="result-box mb-3">
+                    <h3>🔍 AI 审阅与定位报告</h3>
+                    <div id="ai-analysis-text" class="markdown-body" style="font-size:0.9rem;margin-top:8px;"></div>
+                </div>
+
+                <div class="diff-container hidden" id="diff-view-area">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 style="margin:0;">代码变更对比（<span id="mod-file-name" style="color:var(--primary);"></span>）</h3>
+                        <label style="display:flex;align-items:center;gap:6px;background:var(--bg-color);padding:6px 12px;border-radius:4px;border:1px solid var(--secondary);cursor:pointer;">
+                            <input type="checkbox" id="accept-opt" checked style="width:16px;height:16px;">
+                            <span style="font-weight:600;color:var(--secondary);">采用此代码并注入 ZIP</span>
+                        </label>
+                    </div>
+
+                    <div class="code-comparison" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;min-height:400px;">
+                        <div class="code-panel">
+                            <div class="panel-header" style="background:#fce8e6;color:#c5221f;border-bottom:1px solid #f9d2ce;">❌ 优化前 (Original)</div>
+                            <textarea id="original-code" readonly></textarea>
+                        </div>
+                        <div class="code-panel">
+                            <div class="panel-header" style="background:#e6f4ea;color:#137333;border-bottom:1px solid #ceead6;">
+                                <span>✅ 优化后 (Optimized)</span>
+                                <button class="action-btn" id="copy-code-btn" style="border-color:#137333;color:#137333;">直接复制</button>
+                            </div>
+                            <textarea id="optimized-code"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions-footer mt-3" style="text-align:center;">
+                    <button class="primary-btn" id="download-zip-btn" style="width:100%;max-width:400px;font-size:1.1rem;padding:14px;">
+                        ✅ 打包并下载更新后的 ZIP
+                    </button>
+                    <p style="font-size:0.8rem;color:#888;margin-top:8px;">包含所有未修改的文件以及新采纳的优化代码</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <p id="loading-text">正在处理请求...</p>
+    </div>
+
+    <script src="https://fastly.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

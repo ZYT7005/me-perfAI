@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: perf-optimizer
+    runtime: node
+    rootDir: perf-optimizer
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PAGE_SPEED_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: "qwen/qwen3-235b-a22b"

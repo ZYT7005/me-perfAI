@@ -1,0 +1,261 @@
+[
+  {
+    "id": "lcp-discovery-timing",
+    "category": "core_web_vitals",
+    "priority": "p0",
+    "metric_target": "LCP Resource Load Delay < 10% of total LCP",
+    "issue_aliases": [
+      "lcp discovery",
+      "preload scanner",
+      "resource discovery delay",
+      "资源发现延迟"
+    ],
+    "shopify_scope": [
+      "theme.liquid 头部资源顺序",
+      "LCP 图像 fetchpriority 属性",
+      "Liquid 图像标签原生渲染"
+    ],
+    "solution": [
+      "确保 LCP 图像在 HTML 响应的正文中直接解析，禁止通过 JS 动态注入（如 Swiper/Slider 初始化后加载）。",
+      "为首屏 LCP 图像添加 fetchpriority='high'，显式提升其在浏览器下载队列中的优先级。",
+      "对 Hero Section 的关键图像禁止使用 loading='lazy'，避免触发浏览器的延迟加载机制。",
+      "如果 LCP 图像定义在外部 CSS 中，需在 <head> 中使用 <link rel='preload' as='image'> 提前告知浏览器。"
+    ],
+    "implementation_hints": [
+      "在 DevTools Performance 面板检查 LCP 元素的 'Resource Load Delay' 阶段。"
+    ],
+    "anti_patterns": [
+      "对首屏 Banner 使用 Intersection Observer 懒加载。",
+      "LCP 图片由第三方 App 渲染。"
+    ]
+  },
+  {
+    "id": "lcp-ttfb-optimization",
+    "category": "core_web_vitals",
+    "priority": "p0",
+    "metric_target": "TTFB < 800ms (Good)",
+    "issue_aliases": [
+      "ttfb",
+      "server response time",
+      "liquid rendering time",
+      "首字节时间"
+    ],
+    "shopify_scope": [
+      "Liquid 模板复杂度",
+      "section 嵌套层级",
+      "Shopify App 注入逻辑"
+    ],
+    "solution": [
+      "减少 theme.liquid 中耗时的全局对象访问和深度嵌套循环。",
+      "对非实时需求的数据（如推荐产品、促销条）采用异步加载，减少首字节生成的阻塞。",
+      "优化 Shopify Collection 页面，确保首屏仅渲染必要的产品对象，利用 paginate 减少单页计算量。",
+      "检查是否有慢响应的 App Proxy 请求阻塞了主页面生成。"
+    ],
+    "implementation_hints": [
+      "使用 Shopify Theme Inspector 查看哪个 snippet 耗时最久。"
+    ],
+    "anti_patterns": [
+      "在 theme.liquid 中使用大量 render 标签嵌套三层以上。"
+    ]
+  },
+  {
+    "id": "lcp-resource-load-duration",
+    "category": "core_web_vitals",
+    "priority": "p0",
+    "metric_target": "Resource Load Duration < 40% of total LCP",
+    "issue_aliases": [
+      "image payload",
+      "bandwidth competition",
+      "resource duration",
+      "资源加载时长"
+    ],
+    "shopify_scope": [
+      "Shopify CDN 图片参数",
+      "响应式 widths 策略",
+      "WebP/AVIF 自动转换"
+    ],
+    "solution": [
+      "利用 image_url 配合 widths 参数实现响应式图片，确保移动端不下载桌面端的大图。",
+      "限制首屏关键资源的数量，移除不必要的 preload，防止与 LCP 图像争抢带宽。",
+      "对于装饰性 LCP 元素，通过降低质量参数（quality）减少字节数。",
+      "确保 LCP 资源没有被重定向（Redirection），直接指向 Shopify CDN 最终地址。"
+    ],
+    "implementation_hints": [
+      "使用 Chrome Lighthouse 查看 'Avoid enormous network payloads' 审计项。"
+    ],
+    "anti_patterns": [
+      "首屏同时 preload 超过 5 个资源。",
+      "LCP 图片未经过 image_url 尺寸限制，直接输出原图。"
+    ]
+  },
+  {
+    "id": "lcp-render-delay-optimization",
+    "category": "core_web_vitals",
+    "priority": "p0",
+    "metric_target": "Render Delay < 10% of total LCP",
+    "issue_aliases": [
+      "render delay",
+      "critical path css",
+      "main-thread work",
+      "渲染延迟"
+    ],
+    "shopify_scope": [
+      "关键 CSS 内联",
+      "JS 脚本执行优先级",
+      "字体渲染策略"
+    ],
+    "solution": [
+      "内联 (Inline) 影响首屏布局的关键 CSS，避免等待外部 stylesheet 文件下载。",
+      "将非关键 JS 标记为 defer 或 type='module'，防止脚本执行阻塞 HTML 解析和 LCP 绘制。",
+      "如果 LCP 是文本块，使用 font-display: swap 确保在自定义字体下载完成前先显示系统字体。",
+      "减少主线程长任务 (Long Tasks > 50ms)，防止 CPU 在渲染窗口期处于繁忙状态。"
+    ],
+    "implementation_hints": [
+      "在 Performance 面板观察 LCP 之前的 Main Thread 任务密度。"
+    ],
+    "anti_patterns": [
+      "在 head 顶部放置同步的第三方分析脚本（如 GTM, Hotjar）。"
+    ]
+  },
+  {
+    "id": "lcp-picture-source-optimization",
+    "category": "media_optimization",
+    "priority": "p0",
+    "metric_target": "LCP Discovery Delay < 100ms",
+    "issue_aliases": [
+      "picture element",
+      "source media",
+      "art direction",
+      "picture 标签优化"
+    ],
+    "shopify_scope": [
+      "Responsive images",
+      "Mobile/Desktop 差异图渲染",
+      "Liquid 模板图片输出"
+    ],
+    "solution": [
+      "避免在 <picture> 标签中缺少 <img> 回退标签，否则 Preload Scanner 可能无法识别 LCP 资源。",
+      "在 <picture> 内部的 <img> 标签上显式添加 fetchpriority='high'，该属性会自动应用于当前匹配的 source 资源。",
+      "确保 <source> 标签的 media 属性简单明了，避免过于复杂的查询导致浏览器解析逻辑延迟。",
+      "对于 Art Direction（中外移动端不同图），确保最匹配的 source 放在最前面，并配套使用 link rel='preload' imagesrcset 进行头部预加载。"
+    ],
+    "implementation_hints": [
+      "检查浏览器是否在下载 CSS 之前就开始下载 <picture> 中匹配的 source 图片。"
+    ],
+    "anti_patterns": [
+      "在 <picture> 中使用 JS 来动态切换 source。",
+      "在首屏 <picture> 标签上使用 loading='lazy'。"
+    ]
+  },
+  {
+    "id": "shopify-native-image-tag-best-practice",
+    "category": "media_optimization",
+    "priority": "p1",
+    "metric_target": "Reduction in Largest Contentful Paint",
+    "issue_aliases": [
+      "image_tag",
+      "liquid image filter",
+      "shopify native images"
+    ],
+    "shopify_scope": [
+      "Liquid 渲染引擎",
+      "Theme 性能规范",
+      "Images API"
+    ],
+    "solution": [
+      "优先使用 Shopify 原生 {{ image | image_tag }} 滤镜而非手动编写 <img> 或 <picture>，它会自动处理 widths, alt 和原生 srcset。",
+      "利用 image_tag 的 preload: true 参数，这会自动在 HTML 头部注入正确的 preload link 标签。",
+      "针对 LCP 元素，在 image_tag 中传入 fetchpriority: 'high' 参数。",
+      "通过 sizes 属性告诉浏览器在不同断点下图片的显示宽度，防止浏览器默认下载最大尺寸的图片。"
+    ],
+    "implementation_hints": [
+      "代码示例：{{ section.settings.image | image_tag: preload: true, fetchpriority: 'high', sizes: '(min-width: 1200px) 50vw, 100vw', widths: '375, 750, 1100, 1500' }}"
+    ],
+    "anti_patterns": [
+      "手动拼写复杂的 <picture> 结构却忘记处理 Shopify CDN 的过滤参数。"
+    ]
+  },
+  {
+    "id": "lcp-request-chain-depth",
+    "category": "core_web_vitals",
+    "priority": "p0",
+    "metric_target": "LCP Request Chain Depth = 1",
+    "issue_aliases": [
+      "critical request chains",
+      "indirect lcp",
+      "请求链深度",
+      "间接发现"
+    ],
+    "shopify_scope": [
+      "CSS Background Images",
+      "JS injected images",
+      "Client-side sliders"
+    ],
+    "solution": [
+      "消除 LCP 资源的依赖路径。LCP 资源必须由 HTML 直接请求，而不是由 CSS 或 JS 加载后才触发。",
+      "严禁使用 CSS background-image 承载 LCP 元素，因为浏览器必须先下载并解析 CSS 文件才能发现该图片。",
+      "如果必须使用 <picture> 标签进行 Art Direction，必须配合在 head 中使用 <link rel='preload'> 并设置 imagesrcset，以绕过 DOM 解析延迟。"
+    ],
+    "implementation_hints": [
+      "在 DevTools Performance 面板查看 'Initiator' 字段，确保 LCP 资源的发起者是 Document 而非某个 .css 或 .js 文件。"
+    ],
+    "anti_patterns": [
+      "通过外部样式表设置首屏 Banner 图。",
+      "使用懒加载库（如 lazysizes）通过 JS 改写 data-src 属性。"
+    ]
+  },
+  {
+    "id": "lcp-discovery-preload-scanner",
+    "category": "core_web_vitals",
+    "priority": "p0",
+    "metric_target": "LCP Discovery Time ≈ TTFB",
+    "issue_aliases": [
+      "preload scanner efficiency",
+      "speculative parsing",
+      "预加载扫描器优化"
+    ],
+    "shopify_scope": [
+      "theme.liquid 资源排布",
+      "Inline scripts 阻塞",
+      "Meta tags 顺序"
+    ],
+    "solution": [
+      "保持 <head> 简洁，确保 LCP 相关的 preload 标签位于所有同步脚本（Blocking Scripts）之前。",
+      "避免在 <head> 中插入大量的内联 JS 逻辑，这会阻塞 Preload Scanner 扫描后续的图片资源。",
+      "针对 Shopify 2.0，利用 image_tag 的 preload: true 选项，确保生成的 preload 链路属性完整（含 imagesrcset）。"
+    ],
+    "implementation_hints": [
+      "确保 LCP 图像的 HTML 标记出现在响应的前 14KB（第一个 TCP 往返）内，以获得最快发现速度。"
+    ],
+    "anti_patterns": [
+      "在 head 顶部放置过长的第三方 App 注入脚本（如 A/B 测试脚本）。"
+    ]
+  },
+  {
+    "id": "lcp-discovery-fetchpriority-competition",
+    "category": "core_web_vitals",
+    "priority": "p1",
+    "metric_target": "LCP Priority: High / Immediate",
+    "issue_aliases": [
+      "resource competition",
+      "bandwidth hogging",
+      "fetchpriority 竞争"
+    ],
+    "shopify_scope": [
+      "Multiple hero images",
+      "Preloaded fonts",
+      "Carousels"
+    ],
+    "solution": [
+      "严格限制 fetchpriority='high' 的数量。全页面只能给 LCP 元素这一个最高优先级，避免多个资源争抢带宽。",
+      "为非 LCP 但位于首屏的次要资源（如 Logo、小图标）显式设置 fetchpriority='low'，为 LCP 腾出下载通道。",
+      "在启用 Preload 的同时，确保服务器支持 HTTP/2 或 HTTP/3 以实现多路复用，避免队头阻塞。"
+    ],
+    "implementation_hints": [
+      "检查 Network 面板的 Priority 列，确保 LCP 图像在所有图像资源中排名第一。"
+    ],
+    "anti_patterns": [
+      "对首屏所有的图片和 CSS 资源都打上 preload 标签。"
+    ]
+  }
+]
